@@ -40,7 +40,12 @@ def normalize_pubnum(s: str) -> str:
 def kind_suffix(kind: str) -> str:
     if not isinstance(kind, str):
         kind = str(kind)
-    k = unicodedata.normalize('NFKC', kind)
+    k = unicodedata.normalize('NFKC', kind).strip()
+    
+    # 追加条件: PCTの国際公開（日本語表記）の場合はサフィックスなし
+    if k == "特許協力条約に基づいて公開された国際出願":
+        return ""
+
     m = paren_re.search(k)
     if not m:
         return ""
