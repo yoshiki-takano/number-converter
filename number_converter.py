@@ -26,12 +26,40 @@ SHARERESEARCH_REQUIRED_COLUMNS = ["公報番号(抄録リンク)", "公報種別
 DI_PUBLICATION_COLUMNS = ["公報番号", "Publication Number"]
 KIND_COLUMNS = ["公報種別", "Kind Code"]
 
-patterns = [
+SHARERESEARCH_PREFIX_PATTERNS = [
     (r"特開平0|特表平0|特公平0|実開平0|実表平0|実公平0|特開昭|特公昭|特表昭|実開昭|実公昭|実表昭", "JP"),
     (r"特開平1|特表平1|実開平1|実表平1|実公平1", "JP1"),
     (r"特許|特表|特開|実登", "JP"),
 ]
+
+JPNET_TO_DI_SUFFIX_MAP = {
+    "T": "A",
+    "TU": "U",
+    "B": "B*",
+    "B9": "B*",
+    "U9": "U*",
+    "Y9": "Y*",
+    "Y": "Y*",
+}
+JPNET_TO_DI_PREFIX_JP0_KINDS = {"B9", "U9", "Y9"}
+
+DI_TO_JPNET_KIND_MAP = {
+    "B*": "B",
+    "U*": "U",
+    "B2": "B9",
+    "B1": "B9",
+}
+
 paren_re = re.compile(r"\(([A-Za-z])([0-9*]?)\)")
+
+with st.expander("変換規則（概要）", expanded=False):
+    st.markdown("""
+    - Shareresearch: 置換規則で接頭辞を正規化し、`公報種別` をサフィックス化
+    - Shareresearch: WO番号が8桁の場合は `WO20xxxxxxxx` に補正
+    - JP-NET→DI: `TU→U`, `Y9→JP0...Y*`, `Y→JP...Y*`
+    - DI→JP-NET: `B2/B1→B9`, `B*/U*→B/U`, `A` かつ年次5桁目が `5` の場合 `T`
+    - DI→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
+    """)
 
 
 def decode_text_file(data: bytes) -> str:
@@ -154,7 +182,7 @@ def shareresearch_to_di_value(publication_number: str, kind: str | None = None) 
             suffix = paren_match.group(1).upper() + paren_match.group(2)
         normalized = paren_re.sub("", normalized)
 
-    for pat, repl in patterns:
+    for pat, repl in SHARERESEARCH_PREFIX_PATTERNS:
         normalized = re.sub(pat, repl, normalized)
 
     normalized = normalized.replace("-", "").replace("/", "")
@@ -200,23 +228,8 @@ def jpnet_pub_to_di(kind: str, number: str) -> str:
         n = n[1:]
         n = n.lstrip("0") or "0"
 
-    suffix = k
-    if k == "T":
-        suffix = "A"
-    elif k == "TU":
-        suffix = "U"
-    elif k == "B":
-        suffix = "B*"
-    elif k == "B9":
-        suffix = "B*"
-    elif k == "U9":
-        suffix = "U*"
-    elif k == "Y9":
-        suffix = "Y*"
-    elif k == "Y":
-        suffix = "Y*"
-
-    prefix = "JP0" if k in {"B9", "U9", "Y9"} else "JP"
+    suffix = JPNET_TO_DI_SUFFIX_MAP.get(k, k)
+    prefix = "JP0" if k in JPNET_TO_DI_PREFIX_JP0_KINDS else "JP"
     return f"{prefix}{n}{suffix}"
 
 
@@ -237,15 +250,8 @@ def di_to_jpnet_pub(di: str) -> str:
         return s
     num, kind = m.group(1), m.group(2)
 
-    if kind == "B*":
-        kind = "B"
-    elif kind == "U*":
-        kind = "U"
-    elif kind == "B2":
-        kind = "B9"
-    elif kind == "B1":
-        kind = "B9"
-    elif kind == "A" and re.fullmatch(r"\d{10}", num) and num[4] == "5":
+    kind = DI_TO_JPNET_KIND_MAP.get(kind, kind)
+    if kind == "A" and re.fullmatch(r"\d{10}", num) and num[4] == "5":
         kind = "T"
 
     # JP0で始まる数字の場合（B9/U9型）、先頭の0を削除する
