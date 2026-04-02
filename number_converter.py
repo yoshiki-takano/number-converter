@@ -142,6 +142,8 @@ def shareresearch_to_di_value(publication_number: str, kind: str | None = None) 
     normalized = raw.upper().replace(" ", "")
     if normalized.startswith("WO"):
         normalized = normalized.replace("/", "").replace("-", "")
+        if re.fullmatch(r"WO\d{8}", normalized):
+            normalized = f"WO20{normalized[2:]}"
         return normalized
 
     suffix = kind_suffix(kind) if kind is not None else ""
@@ -296,6 +298,28 @@ def di_table_to_jpnet(df: pd.DataFrame, publication_column: str) -> pd.DataFrame
     return result
 
 
+def build_dno_bytes_from_jpnet(df: pd.DataFrame) -> bytes:
+    if "JP-NET番号" not in df.columns:
+        return b""
+
+    work = df.copy()
+    jpnet_series = work["JP-NET番号"].fillna("").astype(str).str.strip()
+
+    if "DI公報番号" in work.columns:
+        di_series = work["DI公報番号"].fillna("").astype(str).str.upper()
+        mask = di_series.str.contains(r"JP|WO", regex=True)
+    else:
+        # DI列がない場合は JP-NET番号文字列から JP/WO を判定する。
+        mask = jpnet_series.str.upper().str.contains(r"JP|WO", regex=True)
+
+    selected = jpnet_series[mask]
+    selected = selected[selected != ""]
+    dno_text = "\n".join(selected.tolist())
+    if dno_text:
+        dno_text += "\n"
+    return dno_text.encode("utf-8-sig")
+
+
 in_options = ["DI", "JP-NET", "Shareresearch"]
 out_options = ["DI", "JP-NET"]
 
@@ -382,6 +406,15 @@ if uploaded and convert_button:
             mime="text/csv",
         )
 
+        if conv_out == "JP-NET":
+            dno_bytes = build_dno_bytes_from_jpnet(df_out)
+            st.download_button(
+                label="JP/WOのみ .DNO をダウンロード",
+                data=dno_bytes,
+                file_name="jp_wo_only.DNO",
+                mime="text/plain",
+            )
+
     elif conv_in == "JP-NET":
         if ext not in JP_NET_EXTENSIONS:
             st.error("JP-NET入力では .DNO / .JNV / .AN ファイルをアップロードしてください。")
@@ -413,5 +446,14 @@ if uploaded and convert_button:
             file_name="converted_jpnet.csv",
             mime="text/csv",
         )
+
+        if conv_out == "JP-NET":
+            dno_bytes = build_dno_bytes_from_jpnet(df_out)
+            st.download_button(
+                label="JP/WOのみ .DNO をダウンロード",
+                data=dno_bytes,
+                file_name="jp_wo_only.DNO",
+                mime="text/plain",
+            )
 else:
     st.info("ファイル（DI / Shareresearch の CSV / Excel、または JP-NET .DNO / .JNV / .AN）をアップロードしてください。")
