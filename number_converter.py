@@ -320,6 +320,29 @@ def build_dno_bytes_from_jpnet(df: pd.DataFrame) -> bytes:
     return dno_text.encode("utf-8-sig")
 
 
+def render_conversion_output(df_out: pd.DataFrame, out_name: str, success_message: str, conv_out: str):
+    st.success(success_message)
+    st.subheader("変換結果のプレビュー（先頭50件）")
+    st.dataframe(df_out.head(50))
+
+    csv_bytes = df_out.to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        label="変換済みCSVをダウンロード",
+        data=csv_bytes,
+        file_name=out_name,
+        mime="text/csv",
+    )
+
+    if conv_out == "JP-NET":
+        dno_bytes = build_dno_bytes_from_jpnet(df_out)
+        st.download_button(
+            label="JP/WOのみ .DNO をダウンロード",
+            data=dno_bytes,
+            file_name="jp_wo_only.DNO",
+            mime="text/plain",
+        )
+
+
 in_options = ["DI", "JP-NET", "Shareresearch"]
 out_options = ["DI", "JP-NET"]
 
@@ -349,6 +372,10 @@ with col2:
 
 st.session_state.conv_in = conv_in
 st.session_state.conv_out = conv_out
+
+current_file_sig = None
+if uploaded:
+    current_file_sig = (uploaded.name, len(uploaded.getvalue()))
 
 convert_button = st.button("変換", use_container_width=True)
 
@@ -394,26 +421,15 @@ if uploaded and convert_button:
                 out_name = "jpnet_numbers.csv"
                 success_message = "DIファイルを読み込み、JP-NET公報番号へ変換しました。"
 
-        st.success(success_message)
-        st.subheader("変換結果のプレビュー（先頭50件）")
-        st.dataframe(df_out.head(50))
-
-        csv_bytes = df_out.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            label="変換済みCSVをダウンロード",
-            data=csv_bytes,
-            file_name=out_name,
-            mime="text/csv",
-        )
-
-        if conv_out == "JP-NET":
-            dno_bytes = build_dno_bytes_from_jpnet(df_out)
-            st.download_button(
-                label="JP/WOのみ .DNO をダウンロード",
-                data=dno_bytes,
-                file_name="jp_wo_only.DNO",
-                mime="text/plain",
-            )
+        st.session_state.last_result = {
+            "file_sig": current_file_sig,
+            "conv_in": conv_in,
+            "conv_out": conv_out,
+            "df_out": df_out,
+            "out_name": out_name,
+            "success_message": success_message,
+        }
+        render_conversion_output(df_out, out_name, success_message, conv_out)
 
     elif conv_in == "JP-NET":
         if ext not in JP_NET_EXTENSIONS:
@@ -435,25 +451,32 @@ if uploaded and convert_button:
         else:
             st.info("JP-NET→JP-NET は入力内容をそのまま出力します。")
 
-        st.success("JP-NETファイルを読み込み、変換しました。")
-        st.subheader("変換結果のプレビュー（先頭50件）")
-        st.dataframe(df_out.head(50))
-
-        csv_bytes = df_out.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            label="変換済みCSVをダウンロード",
-            data=csv_bytes,
-            file_name="converted_jpnet.csv",
-            mime="text/csv",
-        )
-
-        if conv_out == "JP-NET":
-            dno_bytes = build_dno_bytes_from_jpnet(df_out)
-            st.download_button(
-                label="JP/WOのみ .DNO をダウンロード",
-                data=dno_bytes,
-                file_name="jp_wo_only.DNO",
-                mime="text/plain",
-            )
+        out_name = "converted_jpnet.csv"
+        success_message = "JP-NETファイルを読み込み、変換しました。"
+        st.session_state.last_result = {
+            "file_sig": current_file_sig,
+            "conv_in": conv_in,
+            "conv_out": conv_out,
+            "df_out": df_out,
+            "out_name": out_name,
+            "success_message": success_message,
+        }
+        render_conversion_output(df_out, out_name, success_message, conv_out)
 else:
-    st.info("ファイル（DI / Shareresearch の CSV / Excel、または JP-NET .DNO / .JNV / .AN）をアップロードしてください。")
+    cached = st.session_state.get("last_result")
+    if uploaded and cached:
+        if (
+            cached.get("file_sig") == current_file_sig
+            and cached.get("conv_in") == conv_in
+            and cached.get("conv_out") == conv_out
+        ):
+            render_conversion_output(
+                cached["df_out"],
+                cached["out_name"],
+                cached["success_message"],
+                cached["conv_out"],
+            )
+        else:
+            st.info("変換ボタンを押すと結果を表示します。")
+    else:
+        st.info("ファイル（DI / Shareresearch の CSV / Excel、または JP-NET .DNO / .JNV / .AN）をアップロードしてください。")
