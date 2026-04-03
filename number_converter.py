@@ -54,11 +54,11 @@ paren_re = re.compile(r"\(([A-Za-z])([0-9*]?)\)")
 
 with st.expander("変換規則（概要）", expanded=False):
     st.markdown("""
-    - Shareresearch: 置換規則で接頭辞を正規化し、`公報種別` をサフィックス化
-    - Shareresearch: WO番号が8桁の場合は `WO20xxxxxxxx` に補正
     - JP-NET→DI: `TU→U`, `Y9→JP0...Y*`, `Y→JP...Y*`
     - DI→JP-NET: `B2/B1→B9`, `B*/U*→B/U`, `A` かつ年次5桁目が `5` の場合 `T`
     - DI→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
+    - Shareresearch: 置換規則で接頭辞を正規化し、`公報種別` をサフィックス化
+    - Shareresearch: WO番号が8桁の場合は `WO20xxxxxxxx` に補正
     """)
 
 
@@ -383,7 +383,7 @@ current_file_sig = None
 if uploaded:
     current_file_sig = (uploaded.name, len(uploaded.getvalue()))
 
-convert_button = st.button("変換", use_container_width=True)
+convert_button = st.button("変換", use_container_width=True, type="primary")
 
 if uploaded and convert_button:
     ext = uploaded.name.rsplit(".", 1)[-1].lower() if "." in uploaded.name else ""
