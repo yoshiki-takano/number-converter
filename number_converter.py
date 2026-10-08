@@ -55,7 +55,8 @@ paren_re = re.compile(r"\(([A-Za-z])([0-9*]?)\)")
 with st.expander("変換規則（概要）", expanded=False):
     st.markdown("""
     - JP-NET→DI: `TU→U`, `Y9→JP0...Y*`, `Y→JP...Y*`
-    - DI→JP-NET: `B2/B1→B9`, `B*/U*→B/U`, `A` かつ年次5桁目が `5` の場合 `T`
+    - DI→JP-NET: 7/8桁の `A` は平成/昭和形式にし、連番が `5xxxxx` の場合 `T`
+    - DI→JP-NET: `B2/B1→B9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
     - DI→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
     - Shareresearch: 置換規則で接頭辞を正規化し、`公報種別` をサフィックス化
     - Shareresearch: WO番号が8桁の場合は `WO20xxxxxxxx` に補正
@@ -251,6 +252,13 @@ def di_to_jpnet_pub(di: str) -> str:
     num, kind = m.group(1), m.group(2)
 
     kind = DI_TO_JPNET_KIND_MAP.get(kind, kind)
+    if kind == "A" and re.fullmatch(r"\d{7,8}", num) and int(num[:-6]) > 0:
+        yy, serial = int(num[:-6]), num[-6:]
+        if serial[0] == "5":
+            kind = "T"
+        era = "H" if yy <= 12 else "S"
+        return f"{kind:<2} {era}{yy:02d}-{serial}"
+
     if kind == "A" and re.fullmatch(r"\d{10}", num) and num[4] == "5":
         kind = "T"
 
@@ -261,8 +269,6 @@ def di_to_jpnet_pub(di: str) -> str:
     # 西暦4桁+6桁なら JP-NET で YYYY-NNNNNN 形式に整形
     if re.fullmatch(r"\d{10}", num):
         num = f"{num[:4]}-{num[4:]}"
-    elif kind == "A" and re.fullmatch(r"[1-9]\d{6}", num):
-        num = f"H{int(num[0]):02d}-{num[1:]}"
     return f"{kind:<2} {num}"
 
 
