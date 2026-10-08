@@ -261,6 +261,8 @@ def di_to_jpnet_pub(di: str) -> str:
     # 西暦4桁+6桁なら JP-NET で YYYY-NNNNNN 形式に整形
     if re.fullmatch(r"\d{10}", num):
         num = f"{num[:4]}-{num[4:]}"
+    elif kind == "A" and re.fullmatch(r"[1-9]\d{6}", num):
+        num = f"H{int(num[0]):02d}-{num[1:]}"
     return f"{kind:<2} {num}"
 
 
