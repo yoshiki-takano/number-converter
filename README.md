@@ -26,15 +26,17 @@ streamlit run number_converter.py
 | --- | --- | --- |
 | DPS | CSV、XLS、XLSX | `公報番号` または `Publication Number`。ヘッダーは先頭3行以内から検出します。 |
 | Shareresearch | CSV、XLS、XLSX | `公報番号(抄録リンク)` と `公報種別` |
-| JP-NET | `.DNO`、`.JNV`、`.AN` | 1行1件。各行は種別と番号を含む形式です。 |
+| JP-NET | `.DNO`、`.JNV`、`.AN`、`.TXT` | 1行1件。各行は種別と番号を含む形式です。 |
+| JP-NET | CSV、XLS、XLSX | 1列に種別と番号を含む形式、または種別列と番号列に分かれた形式。ヘッダー行の有無は自動判定します。 |
 
-CSVはUTF-8系またはCP932の文字コードで読み込みます。Excel形式の読み込みには `openpyxl` と `xlrd` を使用します。
+CSVはUTF-8系またはCP932の文字コードで読み込みます。CSV / ExcelでDPSまたはShareresearchの必要列が見つからない場合は、JP-NET形式として扱います。TXT / CSV / Excelでは、公報番号か出願番号かを画面で選択します。`.AN` は出願番号、`.DNO` / `.JNV` は公報番号として扱います。Excel形式の読み込みには `openpyxl` と `xlrd` を使用します。
 
 ## 変換
 
 - DPSからは、番号の整形結果またはJP-NET形式を出力できます。
 - Shareresearchからは、DPS公報番号またはJP-NET形式を出力できます。
 - JP-NETからDPSを出力する場合、`.AN` はDPS出願番号、`.DNO` / `.JNV` はDPS公報番号に変換します。
+- TXT / CSV / ExcelのJP-NET入力は、選択した番号種別に応じてDPS出願番号またはDPS公報番号に変換します。
 - JP-NETをJP-NETとして出力するときは、入力内容をそのままCSVに出力します。
 
 JP-NET形式への変換では、主に次の規則を適用します。

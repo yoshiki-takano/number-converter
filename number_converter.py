@@ -8,19 +8,20 @@ from io import BytesIO, StringIO
 st.set_page_config(page_title="公報番号 変換ツール", layout="wide")
 st.title("公報番号 変換ツール")
 st.markdown("""
-DPS / Shareresearch の一覧ファイルと JP-NET 番号ファイル（`.DNO`, `.JNV`, `.AN`）を読み込み、
+DPS / Shareresearch の一覧ファイルと JP-NET 番号ファイル（`.DNO`, `.JNV`, `.AN`, `.TXT`、CSV / Excel）を読み込み、
 **DPS / JP-NET 形式**へ変換します。
 
 - 必要項目
     - DPS: `公報番号` または `Publication Number` を含む CSV / Excel
-    - JP-NET: 1行1件の番号ファイル（`.DNO`, `.JNV`, `.AN`）
+    - JP-NET: 1行1件の番号ファイル（`.DNO`, `.JNV`, `.AN`, `.TXT`）またはCSV / Excel
     - Shareresearch: `公報番号(抄録リンク)` と `公報種別` を含む CSV / Excel
 
 """)
 
-uploaded = st.file_uploader("ファイルをアップロード", type=["csv", "xlsx", "xls", "dno", "jnv", "an"])
+uploaded = st.file_uploader("ファイルをアップロード", type=["csv", "xlsx", "xls", "dno", "jnv", "an", "txt"])
 
-JP_NET_EXTENSIONS = {"dno", "jnv", "an"}
+JP_NET_EXTENSIONS = {"dno", "jnv", "an", "txt"}
+JP_NET_TABULAR_EXTENSIONS = {"csv", "xlsx", "xls"}
 TABULAR_EXTENSIONS = {"csv", "xlsx", "xls"}
 SHARERESEARCH_REQUIRED_COLUMNS = ["公報番号(抄録リンク)", "公報種別"]
 DI_PUBLICATION_COLUMNS = ["公報番号", "Publication Number"]
@@ -82,6 +83,8 @@ def parse_jpnet_lines(text: str):
         if len(parts) < 2:
             continue
         kind = parts[0].upper()
+        if not re.fullmatch(r"[A-Z]{1,2}[0-9]?", kind):
+            continue
         number = "".join(parts[1:]).strip()
         rows.append({"JP-NET種別": kind, "JP-NET番号": number, "元行": raw.rstrip("\n")})
     return pd.DataFrame(rows)
@@ -105,6 +108,43 @@ def normalize_label(value) -> str:
     if pd.isna(value):
         return ""
     return unicodedata.normalize("NFKC", str(value)).strip()
+
+
+def read_jpnet_tabular(uploaded_file, ext: str) -> pd.DataFrame:
+    data = uploaded_file.getvalue()
+    if ext == "csv":
+        source_df = pd.read_csv(
+            StringIO(decode_text_file(data)),
+            engine="python",
+            header=None,
+            dtype=str,
+            keep_default_na=False,
+        )
+    else:
+        source_df = pd.read_excel(BytesIO(data), header=None, dtype=str, keep_default_na=False)
+
+    rows = []
+    for values in source_df.itertuples(index=False, name=None):
+        cells = [normalize_label(value) for value in values if normalize_label(value)]
+        if not cells:
+            continue
+
+        first_cell_parts = re.split(r"\s+", cells[0])
+        if len(first_cell_parts) > 1:
+            kind, number = first_cell_parts[0].upper(), "".join(first_cell_parts[1:])
+        elif len(cells) > 1:
+            kind, number = cells[0].upper(), cells[1]
+        else:
+            continue
+
+        if not re.fullmatch(r"[A-Z]{1,2}[0-9]?", kind) or not re.search(r"\d", number):
+            continue
+        rows.append({
+            "JP-NET種別": kind,
+            "JP-NET番号": number,
+            "元行": " ".join(cells),
+        })
+    return pd.DataFrame(rows, columns=["JP-NET種別", "JP-NET番号", "元行"])
 
 
 def find_header_row(uploaded_file, ext: str, candidates: list[str], max_rows: int = 3) -> int | None:
@@ -382,6 +422,9 @@ if uploaded:
         elif find_header_row(uploaded, ext, DI_PUBLICATION_COLUMNS) is not None:
             st.session_state.conv_in = "DPS"
             st.session_state.conv_out = "JP-NET"
+        else:
+            st.session_state.conv_in = "JP-NET"
+            st.session_state.conv_out = "DPS"
 
 col1, col2 = st.columns(2)
 with col1:
@@ -391,6 +434,21 @@ with col2:
 
 st.session_state.conv_in = conv_in
 st.session_state.conv_out = conv_out
+
+number_type = "公報番号"
+if (
+    uploaded
+    and conv_in == "JP-NET"
+    and conv_out == "DPS"
+    and ext in {"txt", *JP_NET_TABULAR_EXTENSIONS}
+):
+    st.session_state.setdefault("jpnet_number_type", "公報番号")
+    number_type = st.radio(
+        "JP-NET番号の種類",
+        ["公報番号", "出願番号"],
+        horizontal=True,
+        key="jpnet_number_type",
+    )
 
 current_file_sig = None
 if uploaded:
@@ -451,19 +509,22 @@ if uploaded and convert_button:
         render_conversion_output(df_out, out_name, success_message, conv_out)
 
     elif conv_in == "JP-NET":
-        if ext not in JP_NET_EXTENSIONS:
-            st.error("JP-NET入力では .DNO / .JNV / .AN ファイルをアップロードしてください。")
+        if ext not in JP_NET_EXTENSIONS | JP_NET_TABULAR_EXTENSIONS:
+            st.error("JP-NET入力では .DNO / .JNV / .AN / .TXT、または CSV / Excel ファイルをアップロードしてください。")
             st.stop()
 
-        text = decode_text_file(uploaded.getvalue())
-        df_jp = parse_jpnet_lines(text)
+        if ext in JP_NET_TABULAR_EXTENSIONS:
+            df_jp = read_jpnet_tabular(uploaded, ext)
+        else:
+            text = decode_text_file(uploaded.getvalue())
+            df_jp = parse_jpnet_lines(text)
         if df_jp.empty:
             st.error("JP-NETファイルの解析に失敗しました。行形式をご確認ください。")
             st.stop()
 
         df_out = df_jp.copy()
         if conv_out == "DPS":
-            if ext == "an":
+            if ext == "an" or (ext in {"txt", *JP_NET_TABULAR_EXTENSIONS} and number_type == "出願番号"):
                 df_out.insert(0, "DPS出願番号", df_out.apply(lambda r: jpnet_an_to_di(r["JP-NET種別"], r["JP-NET番号"]), axis=1))
             else:
                 df_out.insert(0, "DPS公報番号", df_out.apply(lambda r: jpnet_pub_to_di(r["JP-NET種別"], r["JP-NET番号"]), axis=1))
@@ -479,6 +540,7 @@ if uploaded and convert_button:
             "df_out": df_out,
             "out_name": out_name,
             "success_message": success_message,
+            "number_type": number_type,
         }
         render_conversion_output(df_out, out_name, success_message, conv_out)
 else:
@@ -488,6 +550,7 @@ else:
             cached.get("file_sig") == current_file_sig
             and cached.get("conv_in") == conv_in
             and cached.get("conv_out") == conv_out
+            and cached.get("number_type", "公報番号") == number_type
         ):
             render_conversion_output(
                 cached["df_out"],
@@ -498,4 +561,4 @@ else:
         else:
             st.info("変換ボタンを押すと結果を表示します。")
     else:
-        st.info("ファイル（DPS / Shareresearch の CSV / Excel、または JP-NET .DNO / .JNV / .AN）をアップロードしてください。")
+        st.info("ファイル（DPS / Shareresearch の CSV / Excel、または JP-NET .DNO / .JNV / .AN / .TXT / CSV / Excel）をアップロードしてください。")
