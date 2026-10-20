@@ -13,7 +13,7 @@ DPS / Shareresearch の一覧ファイルと JP-NET 番号ファイル（`.DNO`,
 
 - 必要項目
     - DPS: `公報番号` または `Publication Number` を含む CSV / Excel
-    - JP-NET: 1行1件の番号ファイル（`.DNO`, `.JNV`, `.AN`, `.TXT`）またはCSV / Excel（1行に「種別」と「番号」を記載）
+    - JP-NET: 1行1件の番号ファイル（`.DNO`, `.JNV`, `.AN`, `.TXT`）またはCSV / Excel（1列に A H08-000001 のように記載するか、種別と番号を別々の列にしてください。）
     - Shareresearch: `公報番号(抄録リンク)` と `公報種別` を含む CSV / Excel
 
 """)
