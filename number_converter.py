@@ -36,11 +36,11 @@ SHARERESEARCH_PREFIX_PATTERNS = [
 JPNET_TO_DI_SUFFIX_MAP = {
     "T": "A",
     "TU": "U",
-    "B": "B*",
+    "B": "B2",
     "B9": "B*",
     "U9": "U*",
     "Y9": "Y*",
-    "Y": "Y*",
+    "Y": "Y2",
 }
 JPNET_TO_DI_PREFIX_JP0_KINDS = {"B9", "U9", "Y9"}
 
