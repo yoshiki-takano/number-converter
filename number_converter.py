@@ -72,7 +72,7 @@ with st.expander("変換規則（概要）", expanded=False):
     - JP-NET→DPS: `TU→U`, `Y9→JP0...Y*`, `Y→JP...Y*`
     - DPS→JP-NET: 7/8桁の `A` は平成/昭和形式にし、連番が `5xxxxx` の場合 `T`
     - DPS→JP-NET: `B2/B1→B9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
-    - DPS→JP-NET: 昭和64年・平成01年の `B/Y/U` は、種別ごとの元号表記と境界連番に従って変換。`JP64` の8桁 `A` は `A/T H01-...`
+    - DPS→JP-NET: 昭和8桁・平成01年の `B/Y/U` は元号形式（例: `JP63028003B2` → `B S63-028003`）。昭和64年の `Y/U` は `H01`、`JP64` の8桁 `A` は `A/T H01-...`
     - JP-NET→DPS: `Y H01-007600`、`U H01-057700`、`A H01-091300`、`T H01-500559` 以下は昭和64年として変換
     - DPS→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
     - Shareresearch: 置換規則で接頭辞を正規化し、`公報種別` をサフィックス化
@@ -321,9 +321,9 @@ def di_to_jpnet_pub(di: str) -> str:
     num, kind = m.group(1), m.group(2)
 
     if kind in {"B", "B2", "Y", "Y2", "U"}:
-        boundary_number = re.fullmatch(r"(64|1)(\d{6})", num)
-        if boundary_number:
-            year, serial = boundary_number.groups()
+        era_number = re.fullmatch(r"([1-5]\d|6[0-4]|1)(\d{6})", num)
+        if era_number:
+            year, serial = era_number.groups()
             if kind != "U":
                 jpnet_kind = kind[0]
             elif serial.startswith("5"):
@@ -331,13 +331,13 @@ def di_to_jpnet_pub(di: str) -> str:
             else:
                 jpnet_kind = "U"
 
-            if jpnet_kind in {"B", "TU"}:
-                era = "S" if year == "64" else "H"
-                display_year = year
+            if year == "1":
+                era, display_year = "H", "01"
+            elif year == "64" and jpnet_kind in {"Y", "U"}:
+                era, display_year = "H", "01"
             else:
-                era = "H"
-                display_year = "01"
-            return f"{jpnet_kind:<2} {era}{display_year:>02}-{serial}"
+                era, display_year = "S", year
+            return f"{jpnet_kind:<2} {era}{display_year}-{serial}"
 
     kind = DI_TO_JPNET_KIND_MAP.get(kind, kind)
     if kind == "A" and re.fullmatch(r"\d{7,8}", num) and int(num[:-6]) > 0:
