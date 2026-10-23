@@ -15,10 +15,22 @@ DPS / Shareresearch の一覧ファイルと JP-NET 番号ファイル（`.DNO`,
     - DPS: `公報番号` または `Publication Number` を含む CSV / Excel
     - JP-NET: 1行1件の番号ファイル（`.DNO`, `.JNV`, `.AN`, `.TXT`）またはCSV / Excel（1列に A H08-000001 のように記載するか、種別と番号を別々の列にしてください。）
     - Shareresearch: `公報番号(抄録リンク)` と `公報種別` を含む CSV / Excel
+- 番号貼り付け: DPS公報番号または JP-NET番号（例: `Y  H01-000001`）を1行に1件ずつ貼り付けて変換できます。
 
 """)
 
-uploaded = st.file_uploader("ファイルをアップロード", type=["csv", "xlsx", "xls", "dno", "jnv", "an", "txt"])
+input_mode = st.segmented_control("入力方法", ["ファイル", "番号貼り付け"], default="ファイル") or "ファイル"
+uploaded = None
+pasted_lines: list[str] = []
+if input_mode == "ファイル":
+    uploaded = st.file_uploader("ファイルをアップロード", type=["csv", "xlsx", "xls", "dno", "jnv", "an", "txt"])
+else:
+    pasted_text = st.text_area(
+        "番号（1行に1件）",
+        placeholder="JP64000001Y2\nJP1012441B2\n\nまたは\n\nY  H01-000001\nB  H01-012441",
+        height=200,
+    )
+    pasted_lines = [line.strip() for line in pasted_text.splitlines() if line.strip()]
 
 JP_NET_EXTENSIONS = {"dno", "jnv", "an", "txt"}
 JP_NET_TABULAR_EXTENSIONS = {"csv", "xlsx", "xls"}
@@ -53,6 +65,7 @@ DI_TO_JPNET_KIND_MAP = {
 }
 
 paren_re = re.compile(r"\(([A-Za-z])([0-9*]?)\)")
+jpnet_line_re = re.compile(r"[A-Z]{1,2}[0-9]?\s+\S.*")
 
 with st.expander("変換規則（概要）", expanded=False):
     st.markdown("""
@@ -91,6 +104,14 @@ def parse_jpnet_lines(text: str):
         number = "".join(parts[1:]).strip()
         rows.append({"JP-NET種別": kind, "JP-NET番号": number, "元行": raw.rstrip("\n")})
     return pd.DataFrame(rows)
+
+
+def detect_pasted_format(lines: list[str]) -> str:
+    jpnet_count = sum(
+        bool(jpnet_line_re.fullmatch(unicodedata.normalize("NFKC", line).strip().upper()))
+        for line in lines
+    )
+    return "JP-NET" if jpnet_count * 2 > len(lines) else "DPS"
 
 
 def read_tabular_file(uploaded_file, ext: str) -> pd.DataFrame:
@@ -377,6 +398,16 @@ def di_table_to_jpnet(df: pd.DataFrame, publication_column: str) -> pd.DataFrame
     return result
 
 
+def jpnet_to_output(df_jp: pd.DataFrame, conv_out: str, use_application_number: bool) -> pd.DataFrame:
+    df_out = df_jp.copy()
+    if conv_out == "DPS":
+        if use_application_number:
+            df_out.insert(0, "DPS出願番号", df_out.apply(lambda r: jpnet_an_to_di(r["JP-NET種別"], r["JP-NET番号"]), axis=1))
+        else:
+            df_out.insert(0, "DPS公報番号", df_out.apply(lambda r: jpnet_pub_to_di(r["JP-NET種別"], r["JP-NET番号"]), axis=1))
+    return df_out
+
+
 def build_dno_bytes_from_jpnet(df: pd.DataFrame) -> bytes:
     if "JP-NET番号" not in df.columns:
         return b""
@@ -399,8 +430,24 @@ def build_dno_bytes_from_jpnet(df: pd.DataFrame) -> bytes:
     return dno_text.encode("utf-8-sig")
 
 
-def render_conversion_output(df_out: pd.DataFrame, out_name: str, success_message: str, conv_out: str):
+def render_conversion_output(
+    df_out: pd.DataFrame,
+    out_name: str,
+    success_message: str,
+    conv_in: str,
+    conv_out: str,
+    show_copy_text: bool = False,
+):
     st.success(success_message)
+
+    if show_copy_text:
+        if conv_out == "JP-NET":
+            copy_column = "JP-NET番号" if conv_in == "DPS" else "元行"
+        else:
+            copy_column = "DPS出願番号" if "DPS出願番号" in df_out.columns else "DPS公報番号"
+        st.subheader("変換結果（コピー用）")
+        st.code("\n".join(df_out[copy_column].fillna("").astype(str)), language=None)
+
     st.subheader("変換結果のプレビュー（先頭50件）")
     st.dataframe(df_out.head(50))
 
@@ -422,7 +469,7 @@ def render_conversion_output(df_out: pd.DataFrame, out_name: str, success_messag
         )
 
 
-in_options = ["DPS", "JP-NET", "Shareresearch"]
+in_options = ["DPS", "JP-NET"] if input_mode == "番号貼り付け" else ["DPS", "JP-NET", "Shareresearch"]
 out_options = ["DPS", "JP-NET"]
 
 if st.session_state.get("conv_in") == "DI":
@@ -450,6 +497,13 @@ if uploaded:
         else:
             st.session_state.conv_in = "JP-NET"
             st.session_state.conv_out = "DPS"
+elif pasted_lines:
+    detected_format = detect_pasted_format(pasted_lines)
+    st.session_state.conv_in = detected_format
+    st.session_state.conv_out = "JP-NET" if detected_format == "DPS" else "DPS"
+
+if st.session_state.conv_in not in in_options:
+    st.session_state.conv_in = "DPS"
 
 col1, col2 = st.columns(2)
 with col1:
@@ -462,10 +516,9 @@ st.session_state.conv_out = conv_out
 
 number_type = "公報番号"
 if (
-    uploaded
+    ((uploaded and ext in {"txt", *JP_NET_TABULAR_EXTENSIONS}) or pasted_lines)
     and conv_in == "JP-NET"
     and conv_out == "DPS"
-    and ext in {"txt", *JP_NET_TABULAR_EXTENSIONS}
 ):
     st.session_state.setdefault("jpnet_number_type", "公報番号")
     number_type = st.radio(
@@ -475,13 +528,50 @@ if (
         key="jpnet_number_type",
     )
 
-current_file_sig = None
+current_source_sig = None
 if uploaded:
-    current_file_sig = (uploaded.name, len(uploaded.getvalue()))
+    current_source_sig = (uploaded.name, len(uploaded.getvalue()))
+elif pasted_lines:
+    current_source_sig = ("paste", tuple(pasted_lines))
 
 convert_button = st.button("変換", use_container_width=True, type="primary")
 
-if uploaded and convert_button:
+if pasted_lines and convert_button:
+    if conv_in == "DPS":
+        df = pd.DataFrame({"公報番号": pasted_lines})
+        if conv_out == "DPS":
+            df_out = di_table_to_di(df, "公報番号")
+            out_name = "dps_numbers.csv"
+            success_message = "貼り付けたDPS番号を整形しました。"
+        else:
+            df_out = di_table_to_jpnet(df, "公報番号")
+            out_name = "jpnet_numbers.csv"
+            success_message = "貼り付けたDPS番号をJP-NET公報番号へ変換しました。"
+    else:
+        df_jp = parse_jpnet_lines("\n".join(pasted_lines))
+        if df_jp.empty:
+            st.error("JP-NET番号の解析に失敗しました。`Y  H01-000001` のように種別と番号を1行に1件ずつ入力してください。")
+            st.stop()
+
+        df_out = jpnet_to_output(df_jp, conv_out, number_type == "出願番号")
+        if conv_out == "JP-NET":
+            st.info("JP-NET→JP-NET は入力内容をそのまま出力します。")
+        out_name = "converted_jpnet.csv"
+        success_message = "貼り付けたJP-NET番号を変換しました。"
+
+    st.session_state.last_result = {
+        "source_sig": current_source_sig,
+        "conv_in": conv_in,
+        "conv_out": conv_out,
+        "df_out": df_out,
+        "out_name": out_name,
+        "success_message": success_message,
+        "number_type": number_type,
+        "show_copy_text": True,
+    }
+    render_conversion_output(df_out, out_name, success_message, conv_in, conv_out, show_copy_text=True)
+
+elif uploaded and convert_button:
     ext = uploaded.name.rsplit(".", 1)[-1].lower() if "." in uploaded.name else ""
 
     if conv_in in {"DPS", "Shareresearch"}:
@@ -524,14 +614,14 @@ if uploaded and convert_button:
                 success_message = "DPSファイルを読み込み、JP-NET公報番号へ変換しました。"
 
         st.session_state.last_result = {
-            "file_sig": current_file_sig,
+            "source_sig": current_source_sig,
             "conv_in": conv_in,
             "conv_out": conv_out,
             "df_out": df_out,
             "out_name": out_name,
             "success_message": success_message,
         }
-        render_conversion_output(df_out, out_name, success_message, conv_out)
+        render_conversion_output(df_out, out_name, success_message, conv_in, conv_out)
 
     elif conv_in == "JP-NET":
         if ext not in JP_NET_EXTENSIONS | JP_NET_TABULAR_EXTENSIONS:
@@ -547,19 +637,17 @@ if uploaded and convert_button:
             st.error("JP-NETファイルの解析に失敗しました。行形式をご確認ください。")
             st.stop()
 
-        df_out = df_jp.copy()
-        if conv_out == "DPS":
-            if ext == "an" or (ext in {"txt", *JP_NET_TABULAR_EXTENSIONS} and number_type == "出願番号"):
-                df_out.insert(0, "DPS出願番号", df_out.apply(lambda r: jpnet_an_to_di(r["JP-NET種別"], r["JP-NET番号"]), axis=1))
-            else:
-                df_out.insert(0, "DPS公報番号", df_out.apply(lambda r: jpnet_pub_to_di(r["JP-NET種別"], r["JP-NET番号"]), axis=1))
-        else:
+        use_application_number = ext == "an" or (
+            ext in {"txt", *JP_NET_TABULAR_EXTENSIONS} and number_type == "出願番号"
+        )
+        df_out = jpnet_to_output(df_jp, conv_out, use_application_number)
+        if conv_out == "JP-NET":
             st.info("JP-NET→JP-NET は入力内容をそのまま出力します。")
 
         out_name = "converted_jpnet.csv"
         success_message = "JP-NETファイルを読み込み、変換しました。"
         st.session_state.last_result = {
-            "file_sig": current_file_sig,
+            "source_sig": current_source_sig,
             "conv_in": conv_in,
             "conv_out": conv_out,
             "df_out": df_out,
@@ -567,12 +655,12 @@ if uploaded and convert_button:
             "success_message": success_message,
             "number_type": number_type,
         }
-        render_conversion_output(df_out, out_name, success_message, conv_out)
+        render_conversion_output(df_out, out_name, success_message, conv_in, conv_out)
 else:
     cached = st.session_state.get("last_result")
-    if uploaded and cached:
+    if current_source_sig and cached:
         if (
-            cached.get("file_sig") == current_file_sig
+            cached.get("source_sig") == current_source_sig
             and cached.get("conv_in") == conv_in
             and cached.get("conv_out") == conv_out
             and cached.get("number_type", "公報番号") == number_type
@@ -581,9 +669,13 @@ else:
                 cached["df_out"],
                 cached["out_name"],
                 cached["success_message"],
+                cached["conv_in"],
                 cached["conv_out"],
+                show_copy_text=cached.get("show_copy_text", False),
             )
         else:
             st.info("変換ボタンを押すと結果を表示します。")
+    elif input_mode == "番号貼り付け":
+        st.info("DPS公報番号または JP-NET番号を1行に1件ずつ貼り付けてください。")
     else:
         st.info("ファイル（DPS / Shareresearch の CSV / Excel、または JP-NET .DNO / .JNV / .AN / .TXT / CSV / Excel）をアップロードしてください。")
