@@ -43,6 +43,7 @@ JPNET_TO_DI_SUFFIX_MAP = {
     "Y": "Y2",
 }
 JPNET_TO_DI_PREFIX_JP0_KINDS = {"B9", "U9", "Y9"}
+JP64_H01_BOUNDARY_SERIALS = {"Y": 7600, "U": 57700}
 
 DI_TO_JPNET_KIND_MAP = {
     "B*": "B",
@@ -58,6 +59,8 @@ with st.expander("変換規則（概要）", expanded=False):
     - JP-NET→DPS: `TU→U`, `Y9→JP0...Y*`, `Y→JP...Y*`
     - DPS→JP-NET: 7/8桁の `A` は平成/昭和形式にし、連番が `5xxxxx` の場合 `T`
     - DPS→JP-NET: `B2/B1→B9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
+    - DPS→JP-NET: 昭和64年・平成01年の `B2/Y2/U` は、種別ごとの元号表記と境界連番に従って変換
+    - JP-NET→DPS: `Y H01-007600` 以下、`U H01-057700` 以下は昭和64年として変換
     - DPS→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
     - Shareresearch: 置換規則で接頭辞を正規化し、`公報種別` をサフィックス化
     - Shareresearch: WO番号が8桁の場合は `WO20xxxxxxxx` に補正
@@ -264,6 +267,11 @@ def jpnet_pub_to_di(kind: str, number: str) -> str:
 
     n = raw_n.replace("-", "").replace("/", "")
 
+    boundary_serial = JP64_H01_BOUNDARY_SERIALS.get(k)
+    era_number = re.fullmatch(r"H01(\d{6})", n)
+    if boundary_serial is not None and era_number and int(era_number.group(1)) <= boundary_serial:
+        n = f"64{era_number.group(1)}"
+
     # 例: H07-082290 -> H07082290 -> 07082290 -> 7082290
     if re.fullmatch(r"[A-Z]\d{2}\d+", n):
         n = n[1:]
@@ -290,6 +298,23 @@ def di_to_jpnet_pub(di: str) -> str:
     if not m:
         return s
     num, kind = m.group(1), m.group(2)
+
+    if kind in {"B2", "Y2", "U"}:
+        boundary_number = re.fullmatch(r"(64|1)(\d{6})", num)
+        if boundary_number:
+            year, serial = boundary_number.groups()
+            if kind != "U" or serial.startswith("5"):
+                jpnet_kind = "B" if kind == "B2" else "Y" if kind == "Y2" else "TU"
+            else:
+                jpnet_kind = "U"
+
+            if jpnet_kind in {"B", "TU"}:
+                era = "S" if year == "64" else "H"
+                display_year = year
+            else:
+                era = "H"
+                display_year = "01"
+            return f"{jpnet_kind:<2} {era}{display_year:>02}-{serial}"
 
     kind = DI_TO_JPNET_KIND_MAP.get(kind, kind)
     if kind == "A" and re.fullmatch(r"\d{7,8}", num) and int(num[:-6]) > 0:
