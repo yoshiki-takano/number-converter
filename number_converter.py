@@ -320,12 +320,14 @@ def di_to_jpnet_pub(di: str) -> str:
         return s
     num, kind = m.group(1), m.group(2)
 
-    if kind in {"B2", "Y2", "U"}:
+    if kind in {"B", "B2", "Y", "Y2", "U"}:
         boundary_number = re.fullmatch(r"(64|1)(\d{6})", num)
         if boundary_number:
             year, serial = boundary_number.groups()
-            if kind != "U" or serial.startswith("5"):
-                jpnet_kind = "B" if kind == "B2" else "Y" if kind == "Y2" else "TU"
+            if kind != "U":
+                jpnet_kind = kind[0]
+            elif serial.startswith("5"):
+                jpnet_kind = "TU"
             else:
                 jpnet_kind = "U"
 
