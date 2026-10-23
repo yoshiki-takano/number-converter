@@ -55,7 +55,7 @@ JPNET_TO_DI_SUFFIX_MAP = {
     "Y": "Y2",
 }
 JPNET_TO_DI_PREFIX_JP0_KINDS = {"B9", "U9", "Y9"}
-JP64_H01_BOUNDARY_SERIALS = {"Y": 7600, "U": 57700}
+JP64_H01_BOUNDARY_SERIALS = {"Y": 7600, "U": 57700, "A": 91300, "T": 500559}
 
 DI_TO_JPNET_KIND_MAP = {
     "B*": "B",
@@ -72,8 +72,8 @@ with st.expander("変換規則（概要）", expanded=False):
     - JP-NET→DPS: `TU→U`, `Y9→JP0...Y*`, `Y→JP...Y*`
     - DPS→JP-NET: 7/8桁の `A` は平成/昭和形式にし、連番が `5xxxxx` の場合 `T`
     - DPS→JP-NET: `B2/B1→B9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
-    - DPS→JP-NET: 昭和64年・平成01年の `B2/Y2/U` は、種別ごとの元号表記と境界連番に従って変換
-    - JP-NET→DPS: `Y H01-007600` 以下、`U H01-057700` 以下は昭和64年として変換
+    - DPS→JP-NET: 昭和64年・平成01年の `B/Y/U` は、種別ごとの元号表記と境界連番に従って変換。`JP64` の8桁 `A` は `A/T H01-...`
+    - JP-NET→DPS: `Y H01-007600`、`U H01-057700`、`A H01-091300`、`T H01-500559` 以下は昭和64年として変換
     - DPS→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
     - Shareresearch: 置換規則で接頭辞を正規化し、`公報種別` をサフィックス化
     - Shareresearch: WO番号が8桁の場合は `WO20xxxxxxxx` に補正
@@ -344,6 +344,8 @@ def di_to_jpnet_pub(di: str) -> str:
         yy, serial = int(num[:-6]), num[-6:]
         if serial[0] == "5":
             kind = "T"
+        if yy == 64:
+            yy = 1
         era = "H" if yy <= 12 else "S"
         return f"{kind:<2} {era}{yy:02d}-{serial}"
 
