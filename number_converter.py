@@ -56,6 +56,8 @@ JPNET_TO_DI_SUFFIX_MAP = {
 }
 JPNET_TO_DI_PREFIX_JP0_KINDS = {"B9", "U9", "Y9"}
 JP64_H01_BOUNDARY_SERIALS = {"Y": 7600, "U": 57700, "A": 91300, "T": 500559}
+REPUBLICATION_FIRST = 1979000329
+REPUBLICATION_S_LAST = 2021132658
 
 DI_TO_JPNET_KIND_MAP = {
     "B*": "B",
@@ -74,6 +76,7 @@ with st.expander("変換規則（概要）", expanded=False):
     - DPS→JP-NET: `JP0` で始まる登録番号の `B2/B1→B9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
     - DPS→JP-NET: 昭和8桁の `B/Y/U`、平成1〜8年（7桁・先頭1〜8）の `B/Y`、平成01年の `U` は元号形式（例: `JP63028003B2` → `B S63-028003`、`JP8001038B2` → `B H08-001038`）。昭和64年の `Y/U` は `H01`、`JP64` の8桁 `A` は `A/T H01-...`
     - JP-NET→DPS: `Y H01-007600`、`U H01-057700`、`A H01-091300`、`T H01-500559` 以下は昭和64年として変換
+    - 再公表: `JP2010013455A1` ⇔ `S  WO2010/013455`（1979000329〜2021132658）、それ以降は `SP WO2021/132659`
     - DPS→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
     - Shareresearch: 置換規則で接頭辞を正規化し、`公報種別` をサフィックス化
     - Shareresearch: WO番号が8桁の場合は `WO20xxxxxxxx` に補正
@@ -281,6 +284,12 @@ def jpnet_pub_to_di(kind: str, number: str) -> str:
     if not raw_n:
         return ""
 
+    republication = re.fullmatch(r"WO(\d{4})/?(\d{5,6})", raw_n)
+    if k in {"S", "SP"} and republication:
+        num = republication.group(1) + republication.group(2).zfill(6)
+        if int(num) >= REPUBLICATION_FIRST:
+            return f"JP{num}A1"
+
     # WO公開番号はJP接頭辞・種別サフィックスを付けず、そのまま出力する。
     if raw_n.startswith("WO"):
         raw_n = raw_n.replace("/", "")  # "/"を削除
@@ -319,6 +328,10 @@ def di_to_jpnet_pub(di: str) -> str:
     if not m:
         return s
     num, kind = m.group(1), m.group(2)
+
+    if kind == "A1" and re.fullmatch(r"\d{10}", num) and int(num) >= REPUBLICATION_FIRST:
+        jpnet_kind = "S" if int(num) <= REPUBLICATION_S_LAST else "SP"
+        return f"{jpnet_kind:<2} WO{num[:4]}/{num[4:]}"
 
     if kind in {"B", "B2", "Y", "Y2", "U"}:
         # DPS registration numbers start with JP0, so 7-digit B/Y starting 1-8 are Heisei 1-8 kokoku.
