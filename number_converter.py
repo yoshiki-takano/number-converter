@@ -51,7 +51,7 @@ JPNET_TO_DI_SUFFIX_MAP = {
     "B": "B2",
     "B9": "B*",
     "U9": "U",
-    "Y9": "Y*",
+    "Y9": "Y2",
     "Y": "Y2",
 }
 JPNET_TO_DI_PREFIX_JP0_KINDS = {"B9", "U9", "Y9"}
@@ -64,6 +64,8 @@ DI_TO_JPNET_KIND_MAP = {
     "U*": "U",
     "B2": "B9",
     "B1": "B9",
+    "Y2": "Y9",
+    "Y*": "Y9",
 }
 
 paren_re = re.compile(r"\(([A-Za-z])([0-9*]?)\)")
@@ -71,9 +73,9 @@ jpnet_line_re = re.compile(r"[A-Z]{1,2}[0-9]?\s+\S.*")
 
 with st.expander("変換規則（概要）", expanded=False):
     st.markdown("""
-    - JP-NET→DPS: `TU→U`, `U9→JP0...U`, `Y9→JP0...Y*`, `Y→JP...Y*`
+    - JP-NET→DPS: `TU→U`, `U9→JP0...U`, `Y9→JP0...Y2`, `Y→JP...Y2`
     - DPS→JP-NET: 7/8桁の `A` は平成/昭和形式にし、連番が `5xxxxx` の場合 `T`
-    - DPS→JP-NET: `JP0` で始まる登録番号の `B2/B1→B9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
+    - DPS→JP-NET: `JP0` で始まる登録番号の `B2/B1→B9`, `Y2/Y*→Y9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
     - DPS→JP-NET: `JP03000001U` 以降の `U/U*` は `U9 3000001`
     - DPS→JP-NET: 昭和8桁の `B/Y/U`、平成1〜8年（7桁・先頭1〜8）の `B/Y`、平成01年の `U` は元号形式（例: `JP63028003B2` → `B S63-028003`、`JP8001038B2` → `B H08-001038`）。昭和64年の `Y/U` は `H01`、`JP64` の8桁 `A` は `A/T H01-...`
     - JP-NET→DPS: `Y H01-007600`、`U H01-057700`、`A H01-091300`、`T H01-500559` 以下は昭和64年として変換
