@@ -58,6 +58,7 @@ JPNET_TO_DI_PREFIX_JP0_KINDS = {"B9", "U9", "Y9"}
 JP64_H01_BOUNDARY_SERIALS = {"Y": 7600, "U": 57700, "A": 91300, "T": 500559}
 REPUBLICATION_FIRST = 1979000329
 REPUBLICATION_S_LAST = 2021132658
+KOKOKU_SERIAL_LIMIT = 200000
 
 DI_TO_JPNET_KIND_MAP = {
     "B*": "B",
@@ -78,7 +79,7 @@ with st.expander("変換規則（概要）", expanded=False):
     - DPS→JP-NET: 7/8桁の `A` は平成/昭和形式にし、連番が `5xxxxx` の場合 `T`（`K1` は `A` として変換）
     - DPS→JP-NET: `JP0` で始まる登録番号の `B2/B1→B9`, `Y2/Y*→Y9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
     - DPS→JP-NET: `JP03000001U` 以降の `U/U*` は `U9 3000001`
-    - DPS→JP-NET: 昭和8桁の `B/B1/Y/U`、平成1〜8年（7桁・先頭1〜8）の `B/B1/Y`、平成01年の `U` は元号形式（例: `JP63028003B2` → `B S63-028003`、`JP8001038B2` → `B H08-001038`）。昭和64年の `Y/U` は `H01`、`JP64` の8桁 `A` は `A/T H01-...`
+    - DPS→JP-NET: 昭和8桁の `B/B1/Y/U`、平成1〜8年（7桁・先頭1〜8、下6桁200000未満。以上は登録番号として `B9/Y9`）の `B/B1/Y`、平成01年の `U` は元号形式（例: `JP63028003B2` → `B S63-028003`、`JP8001038B2` → `B H08-001038`）。昭和64年の `Y/U` は `H01`、`JP64` の8桁 `A` は `A/T H01-...`
     - JP-NET→DPS: `Y H01-007600`、`U H01-057700`、`A H01-091300`、`T H01-500559` 以下は昭和64年として変換
     - 再公表: `JP2010013455A1` ⇔ `S  WO2010/013455`（1979000329〜2021132658）、それ以降は `SP WO2021/132659`
     - DPS→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
@@ -346,6 +347,8 @@ def di_to_jpnet_pub(di: str) -> str:
         era_number = re.fullmatch(rf"([1-5]\d|6[0-4]|[{heisei_years}])(\d{{6}})", num)
         if era_number:
             year, serial = era_number.groups()
+            if kind != "U" and len(year) == 1 and int(serial) >= KOKOKU_SERIAL_LIMIT:
+                return f"{'B9' if kind.startswith('B') else 'Y9'} {num}"
             if kind != "U":
                 jpnet_kind = kind[0]
             elif serial.startswith("5"):
