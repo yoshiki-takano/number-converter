@@ -77,7 +77,7 @@ with st.expander("変換規則（概要）", expanded=False):
     - DPS→JP-NET: 7/8桁の `A` は平成/昭和形式にし、連番が `5xxxxx` の場合 `T`
     - DPS→JP-NET: `JP0` で始まる登録番号の `B2/B1→B9`, `Y2/Y*→Y9`, `B*/U*→B/U`, 10桁の `A` は年次5桁目が `5` の場合 `T`
     - DPS→JP-NET: `JP03000001U` 以降の `U/U*` は `U9 3000001`
-    - DPS→JP-NET: 昭和8桁の `B/Y/U`、平成1〜8年（7桁・先頭1〜8）の `B/Y`、平成01年の `U` は元号形式（例: `JP63028003B2` → `B S63-028003`、`JP8001038B2` → `B H08-001038`）。昭和64年の `Y/U` は `H01`、`JP64` の8桁 `A` は `A/T H01-...`
+    - DPS→JP-NET: 昭和8桁の `B/B1/Y/U`、平成1〜8年（7桁・先頭1〜8）の `B/B1/Y`、平成01年の `U` は元号形式（例: `JP63028003B2` → `B S63-028003`、`JP8001038B2` → `B H08-001038`）。昭和64年の `Y/U` は `H01`、`JP64` の8桁 `A` は `A/T H01-...`
     - JP-NET→DPS: `Y H01-007600`、`U H01-057700`、`A H01-091300`、`T H01-500559` 以下は昭和64年として変換
     - 再公表: `JP2010013455A1` ⇔ `S  WO2010/013455`（1979000329〜2021132658）、それ以降は `SP WO2021/132659`
     - DPS→JP-NET: `JP0` で始まる番号は先頭 `0` を削除
@@ -339,7 +339,7 @@ def di_to_jpnet_pub(di: str) -> str:
     if kind in {"U", "U*"} and re.fullmatch(r"0\d{7}", num) and int(num) >= 3000001:
         return f"U9 {int(num)}"
 
-    if kind in {"B", "B2", "Y", "Y2", "U"}:
+    if kind in {"B", "B1", "B2", "Y", "Y2", "U"}:
         # DPS registration numbers start with JP0, so 7-digit B/Y starting 1-8 are Heisei 1-8 kokoku.
         heisei_years = "1-8" if kind != "U" else "1"
         era_number = re.fullmatch(rf"([1-5]\d|6[0-4]|[{heisei_years}])(\d{{6}})", num)
